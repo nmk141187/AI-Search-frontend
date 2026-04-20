@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
 
 import AISearchForm from '@/components/AISearchForm';
@@ -45,7 +45,6 @@ export default function HomePage() {
     return 'Chatbot';
   }, [activeTab]);
 
-  // ✅ FIXED: Do NOT override filters
   const handleStructuredSearch = async (page = 1) => {
     try {
       setLoading(true);
@@ -54,11 +53,11 @@ export default function HomePage() {
       const payload: SearchFilters = {
         ...filters,
         page,
+        limit: filters.limit ?? 10,
       };
 
       const response = await searchCompanies(payload);
 
-      // ✅ Only update page, keep existing filters intact
       setFilters((prev) => ({
         ...prev,
         page,
@@ -82,10 +81,13 @@ export default function HomePage() {
       setError('');
 
       const response = await aiSearchCompanies({ prompt });
-
       setResults(response);
     } catch (err) {
-      setError('AI search failed');
+      if (axios.isAxiosError(err)) {
+        setError(err.response?.data?.message ?? 'Failed to fetch AI search results');
+      } else {
+        setError('AI search failed');
+      }
     } finally {
       setLoading(false);
     }
@@ -94,6 +96,7 @@ export default function HomePage() {
   const handleStructuredExport = async () => {
     try {
       setExportLoading(true);
+      setError('');
 
       const blob = await exportSearchResults({
         sector: filters.sector,
@@ -103,7 +106,7 @@ export default function HomePage() {
 
       downloadBlob(blob, buildExportFileName('structured_search_results'));
     } catch {
-      setError('Export failed');
+      setError('Failed to export structured search results');
     } finally {
       setExportLoading(false);
     }
@@ -111,8 +114,11 @@ export default function HomePage() {
 
   const handleAIExport = async () => {
     try {
+      setExportLoading(true);
+      setError('');
+
       if (!results?.parsedFilters) {
-        setError('Run AI search first');
+        setError('Run AI search before exporting results');
         return;
       }
 
@@ -124,27 +130,59 @@ export default function HomePage() {
 
       downloadBlob(blob, buildExportFileName('ai_search_results'));
     } catch {
-      setError('AI export failed');
+      setError('Failed to export AI search results');
+    } finally {
+      setExportLoading(false);
     }
   };
 
   const handleResetStructured = () => {
-    setFilters({
+    const resetFilters: SearchFilters = {
       sector: undefined,
       subSector: undefined,
       location: undefined,
       page: DEFAULT_PAGE,
       limit: DEFAULT_LIMIT,
-    });
-    setResults(null);
+    };
+
+    setFilters(resetFilters);
+    setError('');
+
+    // after reset, load fresh structured data again
+    setTimeout(() => {
+      handleStructuredSearch(1);
+    }, 0);
   };
+
+  const handleTabChange = (tab: 'structured' | 'ai' | 'chat') => {
+    setActiveTab(tab);
+    setError('');
+
+    if (tab === 'ai' || tab === 'chat') {
+      setResults(null);
+    }
+  };
+
+  // initial load for structured tab
+  useEffect(() => {
+    handleStructuredSearch(1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // when coming back to structured tab, reload fresh data
+  useEffect(() => {
+    if (activeTab === 'structured') {
+      handleStructuredSearch(filters.page ?? 1);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab]);
 
   return (
     <main className="mx-auto max-w-7xl px-4 py-8">
-      <h1 className="text-3xl font-bold mb-6">Prospect Search</h1>
+      <h1 className="mb-6 text-3xl font-bold">AI Prospect Search</h1>
 
       <div className="space-y-6">
-        <SearchTabs activeTab={activeTab} onChange={setActiveTab} />
+        <SearchTabs activeTab={activeTab} onChange={handleTabChange} />
 
         {activeTab === 'structured' && (
           <SearchFiltersForm
@@ -196,12 +234,8 @@ export default function HomePage() {
           <PaginationControls
             page={results.pagination.page}
             totalPages={results.pagination.totalPages}
-            onPrevious={() =>
-              handleStructuredSearch((results.pagination.page ?? 1) - 1)
-            }
-            onNext={() =>
-              handleStructuredSearch((results.pagination.page ?? 1) + 1)
-            }
+            onPrevious={() => handleStructuredSearch((results.pagination.page ?? 1) - 1)}
+            onNext={() => handleStructuredSearch((results.pagination.page ?? 1) + 1)}
             loading={loading}
           />
         )}
