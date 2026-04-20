@@ -23,7 +23,7 @@ export const searchCompanies = async (filters: SearchFilters): Promise<SearchRes
   return response.data;
 };
 
-export const aiSearchCompanies = async (payload: { prompt: string }): Promise<SearchResponse> => {
+export const aiSearchCompanies = async (payload: { prompt: string, page?: number, limit?: number }): Promise<SearchResponse> => {
   const response = await apiClient.post<SearchResponse>('/companies/ai-search', payload);
   return response.data;
 };

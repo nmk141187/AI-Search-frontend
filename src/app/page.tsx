@@ -37,6 +37,9 @@ export default function HomePage() {
   const [exportLoading, setExportLoading] = useState(false);
   const [error, setError] = useState('');
 
+  const [aiPage, setAiPage] = useState(DEFAULT_PAGE);
+  const aiLimit = DEFAULT_LIMIT;
+
   const canShowEmpty = !loading && !error && results && results.data.length === 0;
 
   const summaryTitle = useMemo(() => {
@@ -53,7 +56,7 @@ export default function HomePage() {
       const payload: SearchFilters = {
         ...filters,
         page,
-        limit: filters.limit ?? 10,
+        limit: filters.limit ?? DEFAULT_LIMIT,
       };
 
       const response = await searchCompanies(payload);
@@ -75,12 +78,18 @@ export default function HomePage() {
     }
   };
 
-  const handleAISearch = async () => {
+  const handleAISearch = async (page = 1) => {
     try {
       setLoading(true);
       setError('');
 
-      const response = await aiSearchCompanies({ prompt });
+      const response = await aiSearchCompanies({
+        prompt,
+        page,
+        limit: aiLimit,
+      });
+
+      setAiPage(page);
       setResults(response);
     } catch (err) {
       if (axios.isAxiosError(err)) {
@@ -146,9 +155,9 @@ export default function HomePage() {
     };
 
     setFilters(resetFilters);
+    setResults(null);
     setError('');
 
-    // after reset, load fresh structured data again
     setTimeout(() => {
       handleStructuredSearch(1);
     }, 0);
@@ -158,23 +167,26 @@ export default function HomePage() {
     setActiveTab(tab);
     setError('');
 
-    if (tab === 'ai' || tab === 'chat') {
+    if (tab === 'ai') {
+      setResults(null);
+      setAiPage(DEFAULT_PAGE);
+    }
+
+    if (tab === 'chat') {
       setResults(null);
     }
   };
 
-  // initial load for structured tab
   useEffect(() => {
     handleStructuredSearch(1);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+   
   }, []);
 
-  // when coming back to structured tab, reload fresh data
   useEffect(() => {
     if (activeTab === 'structured') {
       handleStructuredSearch(filters.page ?? 1);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    
   }, [activeTab]);
 
   return (
@@ -205,7 +217,7 @@ export default function HomePage() {
           <AISearchForm
             prompt={prompt}
             onPromptChange={setPrompt}
-            onSubmit={handleAISearch}
+            onSubmit={() => handleAISearch(1)}
             onExport={handleAIExport}
             loading={loading}
             exportLoading={exportLoading}
@@ -236,6 +248,16 @@ export default function HomePage() {
             totalPages={results.pagination.totalPages}
             onPrevious={() => handleStructuredSearch((results.pagination.page ?? 1) - 1)}
             onNext={() => handleStructuredSearch((results.pagination.page ?? 1) + 1)}
+            loading={loading}
+          />
+        )}
+
+        {!loading && activeTab === 'ai' && results?.pagination && results.pagination.totalPages > 1 && (
+          <PaginationControls
+            page={results.pagination.page}
+            totalPages={results.pagination.totalPages}
+            onPrevious={() => handleAISearch((results.pagination.page ?? 1) - 1)}
+            onNext={() => handleAISearch((results.pagination.page ?? 1) + 1)}
             loading={loading}
           />
         )}
